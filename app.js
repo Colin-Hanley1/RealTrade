@@ -167,17 +167,18 @@ async function loadUnitSize() {
     console.error(error);
     return;
   }
-  unitSize = data ? Number(data.unit_size) : 1;
+  unitSize = data ? floorRax(Number(data.unit_size)) : 1;
   f_unitsize.value = unitSize;
   updatePayoutPreview();
 }
 
 saveUnitSize.addEventListener("click", async () => {
-  const value = parseFloat(f_unitsize.value);
+  const value = floorRax(parseFloat(f_unitsize.value));
   if (!(value > 0)) {
-    setMsg(unitSizeMsg, "Enter a unit size greater than 0.", "error");
+    setMsg(unitSizeMsg, "Enter a unit size of at least 1 Rax.", "error");
     return;
   }
+  f_unitsize.value = value;
   const { error } = await sb.from("settings").upsert({ unit_size: value }, { onConflict: "user_id" });
   if (error) {
     setMsg(unitSizeMsg, error.message, "error");
@@ -200,13 +201,20 @@ const statWinRate = document.getElementById("statWinRate");
 const statPnl = document.getElementById("statPnl");
 
 // ===================== Helpers =====================
+// Rax is a whole-number currency — always round down, never to nearest/up,
+// so displayed and stored amounts never overstate stake or payout.
+function floorRax(n) {
+  return Math.floor(n);
+}
+
 function money(n) {
-  const sign = n < 0 ? "-" : "";
-  return `${sign}${Math.abs(n).toFixed(2)} Rax`;
+  const rounded = floorRax(n);
+  const sign = rounded < 0 ? "-" : "";
+  return `${sign}${Math.abs(rounded)} Rax`;
 }
 
 function shares(price, stake) {
-  return stake / (price / 100);
+  return floorRax(stake / (price / 100));
 }
 
 function pnlFor(trade) {
@@ -303,11 +311,11 @@ function updatePayoutPreview() {
   const price = parseFloat(f_price.value);
   const units = parseFloat(f_units.value);
   if (price > 0 && price < 100 && units > 0) {
-    const stake = units * unitSize;
+    const stake = floorRax(units * unitSize);
     const payout = shares(price, stake);
     payoutPreview.textContent = `Stake ${units}u (${money(stake)}) at ${price}% → returns ${money(payout)} if correct`;
   } else {
-    payoutPreview.textContent = "Stake 0u (0.00 Rax) at 0% → returns 0.00 Rax if correct";
+    payoutPreview.textContent = "Stake 0u (0 Rax) at 0% → returns 0 Rax if correct";
   }
 }
 f_price.addEventListener("input", updatePayoutPreview);
@@ -342,10 +350,16 @@ tradeForm.addEventListener("submit", async (e) => {
     units,
     // stake is captured in Rax at the unit size in effect right now, so a
     // later change to unit size doesn't retroactively change past trades.
-    stake: units * unitSize,
+    // Rax is whole-number, so always rounded down.
+    stake: floorRax(units * unitSize),
     notes: document.getElementById("f_notes").value.trim() || null,
     status: "open",
   };
+
+  if (payload.stake <= 0) {
+    setMsg(tradeMsg, `${units}u at your unit size of ${unitSize} Rax rounds down to 0 Rax — raise the units or your unit size.`, "error");
+    return;
+  }
 
   // Active guard: check this trade against your other *open* positions on
   // the same event before it ever reaches the DB — the Dashboard flag alone

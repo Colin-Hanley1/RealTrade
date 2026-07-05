@@ -106,7 +106,9 @@ branch → Branch: main / (root)**. Your site will be live at
 
 ## How the numbers work
 
-- Stakes and P&L are denominated in **Rax** (RealSports' in-app currency), not USD.
+- Stakes and P&L are denominated in **Rax** (RealSports' in-app currency), not USD. Rax is
+  whole-number — unit size, stake, and payout are always rounded **down**, never to nearest
+  or up.
 - Stake is entered in **units** (e.g. 0.5, 1, 2), not raw Rax. Set your **Unit Size** once
   (top of the New Trade tab, saved to your account) and every trade's Rax stake is computed
   as `units × unit size` at the time you log it — changing your unit size later doesn't
