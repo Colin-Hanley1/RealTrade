@@ -267,6 +267,24 @@ tradeForm.addEventListener("submit", async (e) => {
     status: "open",
   };
 
+  // Active guard: check this trade against your other *open* positions on
+  // the same event before it ever reaches the DB — the Dashboard flag alone
+  // only warns after the fact, once you happen to look at that tab.
+  const eventKey = payload.event.toLowerCase();
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const risk = evaluateEventRisk([...existingOpen, { outcome: payload.outcome, price: payload.price }]);
+  if (risk && risk.level === "red") {
+    const lines = existingOpen.map((t) => `  • ${t.outcome} @ ${t.price}%`).join("\n");
+    const proceed = confirm(
+      `This creates a GUARANTEED LOSS on "${payload.event}":\n${lines}\n  • ${payload.outcome} @ ${payload.price}% (this trade)\n\n` +
+      `Combined price: ${risk.sum.toFixed(1)}% — no outcome can be profitable.\n\nLog it anyway?`
+    );
+    if (!proceed) {
+      setMsg(tradeMsg, "Trade not logged — guaranteed-loss combo cancelled.", "error");
+      return;
+    }
+  }
+
   const { error } = await sb.from("trades").insert(payload);
   if (error) {
     if (error.message.includes("trades_user_id_fkey")) {
@@ -392,6 +410,18 @@ function renderDashboard() {
   renderRiskFlags(open);
 }
 
+// Shared by the passive Dashboard flags and the active pre-submit check
+// below — takes a set of same-event trades (price/outcome only needed) and
+// reports whether they combine into a guaranteed-loss or thin-margin spot.
+function evaluateEventRisk(eventTrades) {
+  const distinctOutcomes = new Set(eventTrades.map((t) => t.outcome.trim().toLowerCase()));
+  if (distinctOutcomes.size < 2) return null;
+  const sum = eventTrades.reduce((s, t) => s + Number(t.price), 0);
+  if (sum >= 100) return { level: "red", sum, distinctCount: distinctOutcomes.size };
+  if (sum >= 85) return { level: "yellow", sum, distinctCount: distinctOutcomes.size };
+  return null;
+}
+
 function renderRiskFlags(openTrades) {
   const groups = {};
   for (const t of openTrades) {
@@ -403,15 +433,10 @@ function renderRiskFlags(openTrades) {
   const flags = [];
   for (const key in groups) {
     const group = groups[key];
-    const distinctOutcomes = new Set(group.trades.map((t) => t.outcome.trim().toLowerCase()));
-    if (distinctOutcomes.size < 2) continue;
-
-    const sum = group.trades.reduce((s, t) => s + Number(t.price), 0);
-    if (sum >= 100) {
-      flags.push({ level: "red", text: `Guaranteed loss — combined price ${sum.toFixed(1)}% across ${distinctOutcomes.size} outcomes on "${group.label}"` });
-    } else if (sum >= 85) {
-      flags.push({ level: "yellow", text: `Thin margin — combined price ${sum.toFixed(1)}% across ${distinctOutcomes.size} outcomes on "${group.label}"` });
-    }
+    const risk = evaluateEventRisk(group.trades);
+    if (!risk) continue;
+    const label = risk.level === "red" ? "Guaranteed loss" : "Thin margin";
+    flags.push({ level: risk.level, text: `${label} — combined price ${risk.sum.toFixed(1)}% across ${risk.distinctCount} outcomes on "${group.label}"` });
   }
 
   riskFlagsEl.innerHTML = "";
