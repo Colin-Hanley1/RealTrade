@@ -5,8 +5,9 @@ representing implied probability (e.g. $45 at 50% returns $90 if correct). Track
 history and flags **"lose-lose" combos** — opposing positions on the same event whose
 combined entry prices are ≥100%, which guarantee a net loss no matter the outcome.
 
-Static site (no build step) + [Supabase](https://supabase.com) for auth and storage, so it
-deploys straight to GitHub Pages.
+Static site (no build step), built for a single user, with [Supabase](https://supabase.com)
+as the backend for auth and storage — so it deploys straight to GitHub Pages with no server
+to run.
 
 ## 1. Create a Supabase project
 
@@ -47,11 +48,17 @@ create policy "update own trades" on trades for update using (auth.uid() = user_
 create policy "delete own trades" on trades for delete using (auth.uid() = user_id);
 ```
 
-## 3. (Optional) Turn off email confirmation
+## 3. Create your one user account
 
-By default Supabase requires confirming sign-up via email. For a quick personal setup you
-can disable this in **Authentication → Sign In / Providers → Email → "Confirm email"**
-(toggle off) so you can sign up and start using the app immediately.
+This app has no public sign-up — you create your single account directly in the dashboard:
+
+1. **Authentication → Users → Add user**.
+2. Enter your email and a password, and check **Auto Confirm User** (so it's usable
+   immediately, no confirmation email needed).
+
+That's the only account this site will ever accept — the login screen only signs in, it
+never creates new accounts, so the deployed URL being public doesn't expose your data to
+anyone else.
 
 ## 4. Run it locally
 
@@ -59,7 +66,7 @@ can disable this in **Authentication → Sign In / Providers → Email → "Conf
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000`, sign up, and start logging trades.
+Open `http://localhost:8000` and sign in with the account you created above.
 
 ## 5. Deploy to GitHub Pages
 

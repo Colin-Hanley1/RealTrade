@@ -3,7 +3,6 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===================== State =====================
 let trades = [];
-let authMode = "signin"; // 'signin' | 'signup'
 
 // ===================== Element refs =====================
 const authView = document.getElementById("authView");
@@ -56,14 +55,29 @@ function setMsg(el, text, kind) {
 }
 
 // ===================== Auth =====================
-document.querySelectorAll(".auth-tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    authMode = btn.dataset.authmode;
-    document.querySelectorAll(".auth-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
-    authSubmit.textContent = authMode === "signin" ? "Sign In" : "Sign Up";
-    setMsg(authMsg, "");
+function showApp(session) {
+  authView.hidden = true;
+  appView.hidden = false;
+  userEmailEl.textContent = session.user.email;
+  loadTrades();
+}
+
+function showAuth() {
+  appView.hidden = true;
+  authView.hidden = false;
+  trades = [];
+}
+
+// A 15s watchdog: if the request hangs (rare, but seen with some browser
+// extensions that intercept fetch) surface that instead of leaving the
+// button disabled and the user staring at nothing.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s — check for browser extensions blocking requests to supabase.co`)), ms);
   });
-});
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 authForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -73,15 +87,12 @@ authForm.addEventListener("submit", async (e) => {
   const password = authPassword.value;
 
   try {
-    if (authMode === "signin") {
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } else {
-      const { error } = await sb.auth.signUp({ email, password });
-      if (error) throw error;
-      setMsg(authMsg, "Account created. Check your email if confirmation is required, then sign in.", "ok");
-    }
+    const { data, error } = await withTimeout(sb.auth.signInWithPassword({ email, password }), 15000, "Sign in");
+    if (error) throw error;
+    if (!data.session) throw new Error("Signed in but no session was returned — please retry.");
+    showApp(data.session);
   } catch (err) {
+    console.error(err);
     setMsg(authMsg, err.message, "error");
   } finally {
     authSubmit.disabled = false;
@@ -90,18 +101,16 @@ authForm.addEventListener("submit", async (e) => {
 
 document.getElementById("signOutBtn").addEventListener("click", async () => {
   await sb.auth.signOut();
+  showAuth();
 });
 
+// Covers page load/refresh with an existing session, and keeps state in
+// sync if the session changes in another tab (e.g. signing out elsewhere).
 sb.auth.onAuthStateChange((_event, session) => {
   if (session) {
-    authView.hidden = true;
-    appView.hidden = false;
-    userEmailEl.textContent = session.user.email;
-    loadTrades();
+    showApp(session);
   } else {
-    appView.hidden = true;
-    authView.hidden = false;
-    trades = [];
+    showAuth();
   }
 });
 
