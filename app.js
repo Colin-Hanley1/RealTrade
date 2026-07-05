@@ -3,7 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===================== State =====================
 let trades = [];
-let unitSize = 1.0;
+let unitSize = 1;
 
 // ===================== Element refs =====================
 const authView = document.getElementById("authView");
