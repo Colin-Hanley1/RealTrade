@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RealTradeTracker — Ledger</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📒</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<!-- ===================== AUTH VIEW ===================== -->
+<div id="authView" class="auth-view">
+  <div class="auth-card">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <h1>REALTRADE<span class="brand-accent">.LEDGER</span></h1>
+    </div>
+    <p class="tagline">Position discipline for prediction-market trading.</p>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab-btn active" data-authmode="signin">Sign In</button>
+      <button type="button" class="auth-tab-btn" data-authmode="signup">Sign Up</button>
+    </div>
+
+    <form id="authForm" class="auth-form">
+      <label>
+        <span>Email</span>
+        <input type="email" id="authEmail" required autocomplete="email" placeholder="you@domain.com">
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" id="authPassword" required autocomplete="current-password" minlength="6" placeholder="••••••••">
+      </label>
+      <button type="submit" class="btn btn-primary" id="authSubmit">Sign In</button>
+      <p class="auth-msg" id="authMsg"></p>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== APP VIEW ===================== -->
+<div id="appView" class="app-view" hidden>
+  <header class="topbar">
+    <div class="brand brand-sm">
+      <span class="brand-mark">◆</span>
+      <h1>REALTRADE<span class="brand-accent">.LEDGER</span></h1>
+    </div>
+    <nav class="tabs" id="mainTabs">
+      <button type="button" class="tab-btn active" data-tab="new">New Trade</button>
+      <button type="button" class="tab-btn" data-tab="history">History</button>
+      <button type="button" class="tab-btn" data-tab="dashboard">Dashboard</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="userEmail" class="user-email"></span>
+      <button type="button" class="btn btn-ghost" id="signOutBtn">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ---------- NEW TRADE ---------- -->
+    <section class="panel" id="panel-new">
+      <h2 class="panel-title">Log a Trade</h2>
+      <form id="tradeForm" class="trade-form">
+        <div class="field-grid">
+          <label>
+            <span>Date</span>
+            <input type="date" id="f_date" required>
+          </label>
+          <label>
+            <span>Event</span>
+            <input type="text" id="f_event" required placeholder="Yankees @ Red Sox 7/5">
+          </label>
+          <label>
+            <span>Outcome / Side</span>
+            <input type="text" id="f_outcome" required placeholder="Yankees ML">
+          </label>
+          <label>
+            <span>Price (¢ implied %)</span>
+            <input type="number" id="f_price" required min="1" max="99" step="0.1" placeholder="50">
+          </label>
+          <label>
+            <span>Stake ($)</span>
+            <input type="number" id="f_stake" required min="0.01" step="0.01" placeholder="45">
+          </label>
+        </div>
+        <label class="full">
+          <span>Notes</span>
+          <textarea id="f_notes" rows="2" placeholder="Optional context, reasoning, hedge plan…"></textarea>
+        </label>
+        <div class="payout-preview" id="payoutPreview">Stake $0.00 at 0% → returns $0.00 if correct</div>
+        <button type="submit" class="btn btn-primary">Log Trade</button>
+        <p class="form-msg" id="tradeMsg"></p>
+      </form>
+    </section>
+
+    <!-- ---------- HISTORY ---------- -->
+    <section class="panel" id="panel-history" hidden>
+      <div class="panel-head">
+        <h2 class="panel-title">History</h2>
+        <div class="filters">
+          <select id="filterStatus">
+            <option value="all">All statuses</option>
+            <option value="open">Open</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+            <option value="push">Push</option>
+          </select>
+          <input type="text" id="filterEvent" placeholder="Filter by event…">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="ledger-table" id="historyTable">
+          <thead>
+            <tr>
+              <th>Date</th><th>Event</th><th>Outcome</th><th>Price</th><th>Stake</th>
+              <th>Status</th><th>P&amp;L</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+      <p class="empty-state" id="historyEmpty" hidden>No trades logged yet.</p>
+    </section>
+
+    <!-- ---------- DASHBOARD ---------- -->
+    <section class="panel" id="panel-dashboard" hidden>
+      <h2 class="panel-title">Dashboard</h2>
+
+      <div id="riskFlags" class="risk-flags"></div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">Total Trades</span>
+          <span class="stat-value" id="statTotal">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Open Exposure</span>
+          <span class="stat-value" id="statExposure">$0.00</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Win Rate</span>
+          <span class="stat-value" id="statWinRate">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Realized P&amp;L</span>
+          <span class="stat-value" id="statPnl">$0.00</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,299 @@
+// ===================== Supabase client =====================
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===================== State =====================
+let trades = [];
+let authMode = "signin"; // 'signin' | 'signup'
+
+// ===================== Element refs =====================
+const authView = document.getElementById("authView");
+const appView = document.getElementById("appView");
+const authForm = document.getElementById("authForm");
+const authEmail = document.getElementById("authEmail");
+const authPassword = document.getElementById("authPassword");
+const authSubmit = document.getElementById("authSubmit");
+const authMsg = document.getElementById("authMsg");
+const userEmailEl = document.getElementById("userEmail");
+
+const tradeForm = document.getElementById("tradeForm");
+const tradeMsg = document.getElementById("tradeMsg");
+const payoutPreview = document.getElementById("payoutPreview");
+
+const historyBody = document.getElementById("historyBody");
+const historyEmpty = document.getElementById("historyEmpty");
+const filterStatus = document.getElementById("filterStatus");
+const filterEvent = document.getElementById("filterEvent");
+
+const riskFlagsEl = document.getElementById("riskFlags");
+const statTotal = document.getElementById("statTotal");
+const statExposure = document.getElementById("statExposure");
+const statWinRate = document.getElementById("statWinRate");
+const statPnl = document.getElementById("statPnl");
+
+// ===================== Helpers =====================
+function money(n) {
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.abs(n).toFixed(2)}`;
+}
+
+function shares(price, stake) {
+  return stake / (price / 100);
+}
+
+function pnlFor(trade) {
+  if (trade.status === "open") return null;
+  if (trade.status === "push") return 0;
+  const sh = shares(trade.price, trade.stake);
+  if (trade.status === "won") return sh - trade.stake;
+  if (trade.status === "lost") return -trade.stake;
+  return null;
+}
+
+function setMsg(el, text, kind) {
+  el.textContent = text || "";
+  el.classList.remove("error", "ok");
+  if (kind) el.classList.add(kind);
+}
+
+// ===================== Auth =====================
+document.querySelectorAll(".auth-tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    authMode = btn.dataset.authmode;
+    document.querySelectorAll(".auth-tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    authSubmit.textContent = authMode === "signin" ? "Sign In" : "Sign Up";
+    setMsg(authMsg, "");
+  });
+});
+
+authForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg(authMsg, "");
+  authSubmit.disabled = true;
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+
+  try {
+    if (authMode === "signin") {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } else {
+      const { error } = await sb.auth.signUp({ email, password });
+      if (error) throw error;
+      setMsg(authMsg, "Account created. Check your email if confirmation is required, then sign in.", "ok");
+    }
+  } catch (err) {
+    setMsg(authMsg, err.message, "error");
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+document.getElementById("signOutBtn").addEventListener("click", async () => {
+  await sb.auth.signOut();
+});
+
+sb.auth.onAuthStateChange((_event, session) => {
+  if (session) {
+    authView.hidden = true;
+    appView.hidden = false;
+    userEmailEl.textContent = session.user.email;
+    loadTrades();
+  } else {
+    appView.hidden = true;
+    authView.hidden = false;
+    trades = [];
+  }
+});
+
+// ===================== Tabs =====================
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    document.getElementById("panel-new").hidden = btn.dataset.tab !== "new";
+    document.getElementById("panel-history").hidden = btn.dataset.tab !== "history";
+    document.getElementById("panel-dashboard").hidden = btn.dataset.tab !== "dashboard";
+  });
+});
+
+// ===================== New trade form =====================
+const f_price = document.getElementById("f_price");
+const f_stake = document.getElementById("f_stake");
+
+function updatePayoutPreview() {
+  const price = parseFloat(f_price.value);
+  const stake = parseFloat(f_stake.value);
+  if (price > 0 && price < 100 && stake > 0) {
+    const payout = shares(price, stake);
+    payoutPreview.textContent = `Stake ${money(stake)} at ${price}% → returns ${money(payout)} if correct`;
+  } else {
+    payoutPreview.textContent = "Stake $0.00 at 0% → returns $0.00 if correct";
+  }
+}
+f_price.addEventListener("input", updatePayoutPreview);
+f_stake.addEventListener("input", updatePayoutPreview);
+
+tradeForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg(tradeMsg, "");
+
+  const { data: userData } = await sb.auth.getUser();
+  const user_id = userData.user.id;
+
+  const payload = {
+    user_id,
+    trade_date: document.getElementById("f_date").value,
+    event: document.getElementById("f_event").value.trim(),
+    outcome: document.getElementById("f_outcome").value.trim(),
+    price: parseFloat(f_price.value),
+    stake: parseFloat(f_stake.value),
+    notes: document.getElementById("f_notes").value.trim() || null,
+    status: "open",
+  };
+
+  const { error } = await sb.from("trades").insert(payload);
+  if (error) {
+    setMsg(tradeMsg, error.message, "error");
+    return;
+  }
+  setMsg(tradeMsg, "Trade logged.", "ok");
+  tradeForm.reset();
+  updatePayoutPreview();
+  loadTrades();
+});
+
+// ===================== Load / render =====================
+async function loadTrades() {
+  const { data, error } = await sb.from("trades").select("*").order("trade_date", { ascending: false }).order("created_at", { ascending: false });
+  if (error) {
+    console.error(error);
+    return;
+  }
+  trades = data;
+  renderHistory();
+  renderDashboard();
+}
+
+function renderHistory() {
+  const statusFilter = filterStatus.value;
+  const eventFilter = filterEvent.value.trim().toLowerCase();
+
+  const rows = trades.filter((t) => {
+    if (statusFilter !== "all" && t.status !== statusFilter) return false;
+    if (eventFilter && !t.event.toLowerCase().includes(eventFilter)) return false;
+    return true;
+  });
+
+  historyBody.innerHTML = "";
+  historyEmpty.hidden = rows.length > 0;
+
+  for (const t of rows) {
+    const tr = document.createElement("tr");
+    const pnl = pnlFor(t);
+    const pnlClass = pnl === null ? "" : pnl > 0 ? "pnl-pos" : pnl < 0 ? "pnl-neg" : "pnl-zero";
+    const pnlText = pnl === null ? "—" : money(pnl);
+
+    tr.innerHTML = `
+      <td>${t.trade_date}</td>
+      <td>${escapeHtml(t.event)}</td>
+      <td>${escapeHtml(t.outcome)}</td>
+      <td>${t.price}%</td>
+      <td>${money(t.stake)}</td>
+      <td><span class="badge badge-${t.status}">${t.status}</span></td>
+      <td class="${pnlClass}">${pnlText}</td>
+      <td class="row-actions"></td>
+    `;
+
+    const actionsCell = tr.querySelector(".row-actions");
+
+    if (t.status === "open") {
+      const select = document.createElement("select");
+      select.innerHTML = `
+        <option value="">Settle…</option>
+        <option value="won">Won</option>
+        <option value="lost">Lost</option>
+        <option value="push">Push</option>
+      `;
+      select.addEventListener("change", async () => {
+        if (!select.value) return;
+        await sb.from("trades").update({ status: select.value }).eq("id", t.id);
+        loadTrades();
+      });
+      actionsCell.appendChild(select);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "Delete";
+    delBtn.className = "danger";
+    delBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete trade "${t.event} — ${t.outcome}"?`)) return;
+      await sb.from("trades").delete().eq("id", t.id);
+      loadTrades();
+    });
+    actionsCell.appendChild(delBtn);
+
+    historyBody.appendChild(tr);
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+filterStatus.addEventListener("change", renderHistory);
+filterEvent.addEventListener("input", renderHistory);
+
+function renderDashboard() {
+  const open = trades.filter((t) => t.status === "open");
+  const settled = trades.filter((t) => t.status !== "open");
+  const won = settled.filter((t) => t.status === "won");
+  const lost = settled.filter((t) => t.status === "lost");
+
+  statTotal.textContent = trades.length;
+  statExposure.textContent = money(open.reduce((sum, t) => sum + Number(t.stake), 0));
+
+  const decided = won.length + lost.length;
+  statWinRate.textContent = decided === 0 ? "—" : `${((won.length / decided) * 100).toFixed(1)}%`;
+
+  const realizedPnl = settled.reduce((sum, t) => sum + (pnlFor(t) || 0), 0);
+  statPnl.textContent = money(realizedPnl);
+  statPnl.classList.toggle("pnl-pos", realizedPnl > 0);
+  statPnl.classList.toggle("pnl-neg", realizedPnl < 0);
+
+  renderRiskFlags(open);
+}
+
+function renderRiskFlags(openTrades) {
+  const groups = {};
+  for (const t of openTrades) {
+    const key = t.event.trim().toLowerCase();
+    if (!groups[key]) groups[key] = { label: t.event.trim(), trades: [] };
+    groups[key].trades.push(t);
+  }
+
+  const flags = [];
+  for (const key in groups) {
+    const group = groups[key];
+    const distinctOutcomes = new Set(group.trades.map((t) => t.outcome.trim().toLowerCase()));
+    if (distinctOutcomes.size < 2) continue;
+
+    const sum = group.trades.reduce((s, t) => s + Number(t.price), 0);
+    if (sum >= 100) {
+      flags.push({ level: "red", text: `Guaranteed loss — combined price ${sum.toFixed(1)}% across ${distinctOutcomes.size} outcomes on "${group.label}"` });
+    } else if (sum >= 85) {
+      flags.push({ level: "yellow", text: `Thin margin — combined price ${sum.toFixed(1)}% across ${distinctOutcomes.size} outcomes on "${group.label}"` });
+    }
+  }
+
+  riskFlagsEl.innerHTML = "";
+  for (const flag of flags) {
+    const div = document.createElement("div");
+    div.className = `risk-flag ${flag.level}`;
+    div.innerHTML = `<span class="flag-tag">${flag.level === "red" ? "Lose-Lose" : "Warning"}</span><span>${escapeHtml(flag.text)}</span>`;
+    riskFlagsEl.appendChild(div);
+  }
+}
+
+// default the date field to today
+document.getElementById("f_date").value = new Date().toISOString().slice(0, 10);
