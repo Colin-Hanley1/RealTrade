@@ -53,8 +53,8 @@ const TEAM_ABBR = {
   WNBA: [
     ["ATL", "Dream"], ["CHI", "Sky"], ["CONN", "Sun"], ["DAL", "Wings"],
     ["GS", "Valkyries"], ["IND", "Fever"], ["LA", "Sparks"], ["LV", "Aces"],
-    ["MIN", "Lynx"], ["NY", "Liberty"], ["PHX", "Mercury"], ["SEA", "Storm"],
-    ["WAS", "Mystics"],
+    ["MIN", "Lynx"], ["NY", "Liberty"], ["PHX", "Mercury"], ["POR", "Fire"],
+    ["SEA", "Storm"], ["TOR", "Tempo"], ["WAS", "Mystics"],
   ],
 };
 
@@ -379,6 +379,23 @@ tradeForm.addEventListener("submit", async (e) => {
     }
   }
 
+  // Separate guard: same event, same side already open — not inherently bad
+  // (scaling in is a real strategy) but easy to do by accident, so confirm.
+  const sameSide = existingOpen.filter((t) => t.outcome.trim().toLowerCase() === payload.outcome.trim().toLowerCase());
+  if (sameSide.length > 0) {
+    const priorUnits = sameSide.reduce((s, t) => s + Number(t.units || 0), 0);
+    const priorStake = sameSide.reduce((s, t) => s + Number(t.stake), 0);
+    const lines = sameSide.map((t) => `  • ${t.units || "?"}u (${money(t.stake)}) @ ${t.price}%`).join("\n");
+    const proceed = confirm(
+      `You're doubling down on "${payload.outcome}" for "${payload.event}":\n${lines}\n  • ${units}u (${money(payload.stake)}) @ ${payload.price}% (this trade)\n\n` +
+      `Total on this side would be ${priorUnits + units}u (${money(priorStake + payload.stake)}).\n\nLog it anyway?`
+    );
+    if (!proceed) {
+      setMsg(tradeMsg, "Trade not logged — double-down cancelled.", "error");
+      return;
+    }
+  }
+
   const { error } = await sb.from("trades").insert(payload);
   if (error) {
     if (error.message.includes("trades_user_id_fkey")) {
@@ -519,6 +536,18 @@ function evaluateEventRisk(eventTrades) {
   return null;
 }
 
+// Same event, same outcome, 2+ open trades — flags scaling into one side,
+// intentional or not.
+function evaluateDoubleUps(eventTrades) {
+  const bySide = {};
+  for (const t of eventTrades) {
+    const key = t.outcome.trim().toLowerCase();
+    if (!bySide[key]) bySide[key] = { label: t.outcome.trim(), trades: [] };
+    bySide[key].trades.push(t);
+  }
+  return Object.values(bySide).filter((g) => g.trades.length > 1);
+}
+
 function renderRiskFlags(openTrades) {
   const groups = {};
   for (const t of openTrades) {
@@ -531,16 +560,23 @@ function renderRiskFlags(openTrades) {
   for (const key in groups) {
     const group = groups[key];
     const risk = evaluateEventRisk(group.trades);
-    if (!risk) continue;
-    const label = risk.level === "red" ? "Guaranteed loss" : "Thin margin";
-    flags.push({ level: risk.level, text: `${label} — combined price ${risk.sum.toFixed(1)}% across ${risk.distinctCount} outcomes on "${group.label}"` });
+    if (risk) {
+      const label = risk.level === "red" ? "Guaranteed loss" : "Thin margin";
+      flags.push({ level: risk.level, text: `${label} — combined price ${risk.sum.toFixed(1)}% across ${risk.distinctCount} outcomes on "${group.label}"` });
+    }
+    for (const side of evaluateDoubleUps(group.trades)) {
+      const units = side.trades.reduce((s, t) => s + Number(t.units || 0), 0);
+      const stake = side.trades.reduce((s, t) => s + Number(t.stake), 0);
+      flags.push({ level: "blue", text: `Doubled up — ${side.trades.length}× on "${side.label}" for "${group.label}", ${units}u (${money(stake)}) total` });
+    }
   }
 
   riskFlagsEl.innerHTML = "";
   for (const flag of flags) {
     const div = document.createElement("div");
     div.className = `risk-flag ${flag.level}`;
-    div.innerHTML = `<span class="flag-tag">${flag.level === "red" ? "Lose-Lose" : "Warning"}</span><span>${escapeHtml(flag.text)}</span>`;
+    const tag = flag.level === "red" ? "Lose-Lose" : flag.level === "blue" ? "Doubled Up" : "Warning";
+    div.innerHTML = `<span class="flag-tag">${tag}</span><span>${escapeHtml(flag.text)}</span>`;
     riskFlagsEl.appendChild(div);
   }
 }

@@ -118,6 +118,12 @@ branch → Branch: main / (root)**. Your site will be live at
 - **Lose-lose flag**: for each event with two or more *open* trades on different outcomes,
   sums their entry prices. ≥100% combined means you cannot come out ahead on any outcome
   (red flag); 85–99% is a thin-margin warning (yellow flag).
+- **Doubled-up flag**: two or more *open* trades on the same event **and** same side (e.g.
+  two separate "BOS ML" trades) — not inherently bad, but easy to do by accident, so it's
+  called out (blue flag) with your combined units/Rax on that side.
+- Both flags fire two ways: passively on the Dashboard, and actively as a confirmation
+  dialog the moment you submit a trade that would create one — so you see it before it's
+  logged, not just after.
 
 ## League / Market / Event fields
 

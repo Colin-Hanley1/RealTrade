@@ -17,6 +17,8 @@
   --red-dim: #4a2323;
   --yellow: #e8d23d;
   --yellow-dim: #4a4423;
+  --blue: #5b9de8;
+  --blue-dim: #23344a;
 
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -326,6 +328,7 @@ label.full { margin-bottom: 1rem; }
 }
 .risk-flag.red { background: rgba(239,91,91,0.08); border-color: var(--red); color: #ffb9b9; }
 .risk-flag.yellow { background: rgba(232,210,61,0.08); border-color: var(--yellow); color: #f0e8a8; }
+.risk-flag.blue { background: rgba(91,157,232,0.08); border-color: var(--blue); color: #b9d6ff; }
 .risk-flag .flag-tag { text-transform: uppercase; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.05em; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
