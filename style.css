@@ -218,6 +218,21 @@ input:focus, textarea:focus, select:focus {
 .panel-head .panel-title { flex: 1; }
 
 /* ===================== Trade form ===================== */
+.unit-size-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  background: var(--bg-inset);
+  border: 1px dashed var(--amber-dim);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  max-width: 560px;
+  flex-wrap: wrap;
+}
+.unit-size-bar label { flex: 0 0 auto; }
+.unit-size-bar input { width: 8rem; }
+
 .trade-form { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; max-width: 560px; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
 .field-grid label.span-2 { grid-column: span 2; }

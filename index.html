@@ -61,6 +61,16 @@
     <!-- ---------- NEW TRADE ---------- -->
     <section class="panel" id="panel-new">
       <h2 class="panel-title">Log a Trade</h2>
+
+      <div class="unit-size-bar">
+        <label>
+          <span>Unit Size (Rax)</span>
+          <input type="number" id="f_unitsize" min="0.01" step="0.01" placeholder="10">
+        </label>
+        <button type="button" class="btn btn-ghost" id="saveUnitSize">Save Default</button>
+        <span class="form-msg" id="unitSizeMsg"></span>
+      </div>
+
       <form id="tradeForm" class="trade-form">
         <div class="field-grid">
           <label>
@@ -99,8 +109,8 @@
             <input type="number" id="f_price" required min="1" max="99" step="0.1" placeholder="50">
           </label>
           <label>
-            <span>Stake (Rax)</span>
-            <input type="number" id="f_stake" required min="0.01" step="0.01" placeholder="45">
+            <span>Stake (Units)</span>
+            <input type="number" id="f_units" required min="0.1" step="0.1" placeholder="1">
           </label>
         </div>
         <label class="full">
@@ -172,7 +182,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.0/dist/umd/supabase.js"></script>
-<script src="config.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="config.js?v=8"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

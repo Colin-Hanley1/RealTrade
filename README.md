@@ -35,7 +35,8 @@ create table trades (
   event text not null,
   outcome text not null,
   price numeric not null check (price > 0 and price < 100),  -- implied probability, %
-  stake numeric not null check (stake > 0),                  -- Rax risked
+  units numeric not null check (units > 0),                  -- stake in bet-sizing units
+  stake numeric not null check (stake > 0),                  -- units × unit size, in Rax, at entry time
   status text not null default 'open' check (status in ('open','won','lost','push')),
   notes text,
   created_at timestamptz not null default now()
@@ -47,13 +48,27 @@ create policy "select own trades" on trades for select using (auth.uid() = user_
 create policy "insert own trades" on trades for insert with check (auth.uid() = user_id);
 create policy "update own trades" on trades for update using (auth.uid() = user_id);
 create policy "delete own trades" on trades for delete using (auth.uid() = user_id);
+
+create table settings (
+  user_id uuid primary key default auth.uid() references auth.users(id),
+  unit_size numeric not null default 1 check (unit_size > 0)
+);
+
+alter table settings enable row level security;
+
+create policy "select own settings" on settings for select using (auth.uid() = user_id);
+create policy "insert own settings" on settings for insert with check (auth.uid() = user_id);
+create policy "update own settings" on settings for update using (auth.uid() = user_id);
 ```
 
-If you already created the table before the `league` column existed, migrate it instead:
+If you already created the `trades` table before the `league`/`units` columns existed,
+migrate it instead:
 
 ```sql
 alter table trades add column league text not null default 'MLB' check (league in ('MLB','WNBA'));
 alter table trades alter column league drop default;
+alter table trades add column units numeric not null default 1 check (units > 0);
+alter table trades alter column units drop default;
 ```
 
 ## 3. Create your one user account
@@ -92,6 +107,10 @@ branch → Branch: main / (root)**. Your site will be live at
 ## How the numbers work
 
 - Stakes and P&L are denominated in **Rax** (RealSports' in-app currency), not USD.
+- Stake is entered in **units** (e.g. 0.5, 1, 2), not raw Rax. Set your **Unit Size** once
+  (top of the New Trade tab, saved to your account) and every trade's Rax stake is computed
+  as `units × unit size` at the time you log it — changing your unit size later doesn't
+  retroactively change past trades' recorded stakes.
 - **Payout if correct** = `stake / (price / 100)` (e.g. 45 Rax at 50% → 90 Rax).
 - **P&L** on a won trade = payout − stake; on a lost trade = −stake; push = 0.
 - **Lose-lose flag**: for each event with two or more *open* trades on different outcomes,

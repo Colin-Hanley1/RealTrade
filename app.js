@@ -3,6 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===================== State =====================
 let trades = [];
+let unitSize = 1;
 
 // ===================== Element refs =====================
 const authView = document.getElementById("authView");
@@ -85,6 +86,38 @@ f_market.addEventListener("change", updateTeamVisibility);
 f_team.addEventListener("change", updateTeamOtherVisibility);
 refreshMarketOptions();
 
+// ===================== Unit size =====================
+const f_unitsize = document.getElementById("f_unitsize");
+const saveUnitSize = document.getElementById("saveUnitSize");
+const unitSizeMsg = document.getElementById("unitSizeMsg");
+
+async function loadUnitSize() {
+  const { data, error } = await sb.from("settings").select("unit_size").maybeSingle();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  unitSize = data ? Number(data.unit_size) : 1;
+  f_unitsize.value = unitSize;
+  updatePayoutPreview();
+}
+
+saveUnitSize.addEventListener("click", async () => {
+  const value = parseFloat(f_unitsize.value);
+  if (!(value > 0)) {
+    setMsg(unitSizeMsg, "Enter a unit size greater than 0.", "error");
+    return;
+  }
+  const { error } = await sb.from("settings").upsert({ unit_size: value }, { onConflict: "user_id" });
+  if (error) {
+    setMsg(unitSizeMsg, error.message, "error");
+    return;
+  }
+  unitSize = value;
+  setMsg(unitSizeMsg, "Saved.", "ok");
+  updatePayoutPreview();
+});
+
 const historyBody = document.getElementById("historyBody");
 const historyEmpty = document.getElementById("historyEmpty");
 const filterStatus = document.getElementById("filterStatus");
@@ -126,6 +159,7 @@ function showApp(session) {
   authView.hidden = true;
   appView.hidden = false;
   userEmailEl.textContent = session.user.email;
+  loadUnitSize();
   loadTrades();
 }
 
@@ -193,20 +227,21 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 // ===================== New trade form =====================
 const f_price = document.getElementById("f_price");
-const f_stake = document.getElementById("f_stake");
+const f_units = document.getElementById("f_units");
 
 function updatePayoutPreview() {
   const price = parseFloat(f_price.value);
-  const stake = parseFloat(f_stake.value);
-  if (price > 0 && price < 100 && stake > 0) {
+  const units = parseFloat(f_units.value);
+  if (price > 0 && price < 100 && units > 0) {
+    const stake = units * unitSize;
     const payout = shares(price, stake);
-    payoutPreview.textContent = `Stake ${money(stake)} at ${price}% → returns ${money(payout)} if correct`;
+    payoutPreview.textContent = `Stake ${units}u (${money(stake)}) at ${price}% → returns ${money(payout)} if correct`;
   } else {
-    payoutPreview.textContent = "Stake 0.00 Rax at 0% → returns 0.00 Rax if correct";
+    payoutPreview.textContent = "Stake 0u (0.00 Rax) at 0% → returns 0.00 Rax if correct";
   }
 }
 f_price.addEventListener("input", updatePayoutPreview);
-f_stake.addEventListener("input", updatePayoutPreview);
+f_units.addEventListener("input", updatePayoutPreview);
 
 tradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -214,6 +249,7 @@ tradeForm.addEventListener("submit", async (e) => {
 
   const teamCode = f_team.value === "OTHER" ? f_team_other.value.trim().toUpperCase() : f_team.value;
   const outcome = f_market.value === "ML" ? `${teamCode} ML` : MARKET_LABELS[f_market.value];
+  const units = parseFloat(f_units.value);
 
   const payload = {
     // user_id is intentionally omitted — the trades table defaults it to
@@ -223,13 +259,25 @@ tradeForm.addEventListener("submit", async (e) => {
     event: document.getElementById("f_event").value.trim(),
     outcome,
     price: parseFloat(f_price.value),
-    stake: parseFloat(f_stake.value),
+    units,
+    // stake is captured in Rax at the unit size in effect right now, so a
+    // later change to unit size doesn't retroactively change past trades.
+    stake: units * unitSize,
     notes: document.getElementById("f_notes").value.trim() || null,
     status: "open",
   };
 
   const { error } = await sb.from("trades").insert(payload);
   if (error) {
+    if (error.message.includes("trades_user_id_fkey")) {
+      // The session's JWT is still cryptographically valid but its user no
+      // longer exists (e.g. the account was deleted/recreated) — a fresh
+      // sign-in mints a token tied to the current account.
+      await sb.auth.signOut();
+      showAuth();
+      setMsg(authMsg, "Your session pointed at an account that no longer exists — please sign in again.", "error");
+      return;
+    }
     setMsg(tradeMsg, error.message, "error");
     return;
   }
@@ -277,7 +325,7 @@ function renderHistory() {
       <td>${escapeHtml(t.event)}</td>
       <td>${escapeHtml(t.outcome)}</td>
       <td>${t.price}%</td>
-      <td>${money(t.stake)}</td>
+      <td>${t.units ? `${t.units}u · ` : ""}${money(t.stake)}</td>
       <td><span class="badge badge-${t.status}">${t.status}</span></td>
       <td class="${pnlClass}">${pnlText}</td>
       <td class="row-actions"></td>
