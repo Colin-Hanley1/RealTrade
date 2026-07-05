@@ -117,12 +117,20 @@ branch → Branch: main / (root)**. Your site will be live at
   sums their entry prices. ≥100% combined means you cannot come out ahead on any outcome
   (red flag); 85–99% is a thin-margin warning (yellow flag).
 
-## League / Market fields
+## League / Market / Event fields
 
 - **League** is limited to MLB and WNBA.
+- Instead of typing a free-text event name, you pick **Away** and **Home** teams by
+  abbreviation (NYY, BOS, ATH, ...). The team list (`TEAM_ABBR` in `app.js`) isn't guaranteed
+  exhaustive (e.g. brand-new expansion franchises may be missing) — pick **Other…** to type
+  any code not listed.
+- These, plus the date, generate a standardized **Event ID** (e.g. `BOS@NYY-2026-07-05`),
+  shown live under the form and stored as the trade's `event` value. It's built from the two
+  team codes *sorted alphabetically*, so it comes out identical no matter which order you
+  enter away/home in across separate trades — this is what makes the lose-lose check
+  (below) reliably match both legs of the same game instead of depending on typing the same
+  free-text event name twice.
 - **Market** is Moneyline, NRFI, or YRFI for MLB; WNBA only offers Moneyline (NRFI/YRFI are
-  first-inning baseball props and don't apply). Moneyline additionally asks which team you
-  took, picked by abbreviation (NYY, BOS, ATH, ...); NRFI/YRFI are themselves the pick, so no
-  team field is needed.
-- The team list (`TEAM_ABBR` in `app.js`) isn't guaranteed exhaustive (e.g. brand-new
-  expansion franchises may be missing) — pick **Other…** to type any code not listed.
+  first-inning baseball props and don't apply). Moneyline additionally shows a **Side**
+  picker scoped to just the two teams you picked; NRFI/YRFI are themselves the pick, so no
+  side field is needed.

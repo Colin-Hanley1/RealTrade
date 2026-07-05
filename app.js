@@ -18,12 +18,18 @@ const userEmailEl = document.getElementById("userEmail");
 const tradeForm = document.getElementById("tradeForm");
 const tradeMsg = document.getElementById("tradeMsg");
 const payoutPreview = document.getElementById("payoutPreview");
+const eventIdPreview = document.getElementById("eventIdPreview");
+const f_date = document.getElementById("f_date");
 const f_league = document.getElementById("f_league");
 const f_market = document.getElementById("f_market");
-const f_team = document.getElementById("f_team");
-const f_team_other = document.getElementById("f_team_other");
-const teamLabel = document.getElementById("teamLabel");
-const teamOtherLabel = document.getElementById("teamOtherLabel");
+const f_away = document.getElementById("f_away");
+const f_away_other = document.getElementById("f_away_other");
+const awayOtherLabel = document.getElementById("awayOtherLabel");
+const f_home = document.getElementById("f_home");
+const f_home_other = document.getElementById("f_home_other");
+const homeOtherLabel = document.getElementById("homeOtherLabel");
+const f_side = document.getElementById("f_side");
+const sideLabel = document.getElementById("sideLabel");
 
 const LEAGUE_MARKETS = {
   MLB: ["ML", "NRFI", "YRFI"],
@@ -52,9 +58,28 @@ const TEAM_ABBR = {
   ],
 };
 
-function populateTeamOptions() {
-  const teams = TEAM_ABBR[f_league.value];
-  f_team.innerHTML = teams.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join("") + `<option value="OTHER">Other…</option>`;
+function populateTeamSelect(selectEl, league) {
+  const teams = TEAM_ABBR[league];
+  const prev = selectEl.value;
+  selectEl.innerHTML = teams.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join("") + `<option value="OTHER">Other…</option>`;
+  if ([...selectEl.options].some((o) => o.value === prev)) selectEl.value = prev;
+}
+
+function resolveTeamCode(selectEl, otherInputEl) {
+  return selectEl.value === "OTHER" ? otherInputEl.value.trim().toUpperCase() : selectEl.value;
+}
+
+function bindOtherToggle(selectEl, otherLabelEl, otherInputEl, onChange) {
+  function update() {
+    const show = selectEl.value === "OTHER";
+    otherLabelEl.hidden = !show;
+    otherInputEl.required = show;
+    if (!show) otherInputEl.value = "";
+    onChange();
+  }
+  selectEl.addEventListener("change", update);
+  otherInputEl.addEventListener("input", onChange);
+  return update;
 }
 
 function refreshMarketOptions() {
@@ -63,28 +88,73 @@ function refreshMarketOptions() {
     opt.hidden = !allowed.includes(opt.value);
   }
   if (!allowed.includes(f_market.value)) f_market.value = allowed[0];
-  populateTeamOptions();
-  updateTeamVisibility();
+  updateSideVisibility();
 }
 
-function updateTeamVisibility() {
-  const needsTeam = f_market.value === "ML";
-  teamLabel.hidden = !needsTeam;
-  f_team.required = needsTeam;
-  updateTeamOtherVisibility();
+function updateSideVisibility() {
+  const needsSide = f_market.value === "ML";
+  sideLabel.hidden = !needsSide;
+  f_side.required = needsSide;
 }
 
-function updateTeamOtherVisibility() {
-  const showOther = !teamLabel.hidden && f_team.value === "OTHER";
-  teamOtherLabel.hidden = !showOther;
-  f_team_other.required = showOther;
-  if (!showOther) f_team_other.value = "";
+function refreshSideOptions() {
+  const awayCode = resolveTeamCode(f_away, f_away_other) || "AWAY";
+  const homeCode = resolveTeamCode(f_home, f_home_other) || "HOME";
+  const prev = f_side.value;
+  f_side.innerHTML = `<option value="${awayCode}">${awayCode} (Away)</option><option value="${homeCode}">${homeCode} (Home)</option>`;
+  if ([...f_side.options].some((o) => o.value === prev)) f_side.value = prev;
 }
 
-f_league.addEventListener("change", refreshMarketOptions);
-f_market.addEventListener("change", updateTeamVisibility);
-f_team.addEventListener("change", updateTeamOtherVisibility);
+// The standardized event key: sorted team codes + date, so it doesn't matter
+// which order the two legs of a hedge were entered in, or which was picked
+// as home/away — two trades on the same matchup+date always match exactly.
+function composeEventId() {
+  const away = resolveTeamCode(f_away, f_away_other);
+  const home = resolveTeamCode(f_home, f_home_other);
+  const date = f_date.value;
+  if (!away || !home || !date) return "";
+  return [away, home].sort().join("@") + "-" + date;
+}
+
+function updateEventIdPreview() {
+  const id = composeEventId();
+  eventIdPreview.textContent = `Event ID: ${id || "—"}`;
+}
+
+function refreshTeamPickers() {
+  populateTeamSelect(f_away, f_league.value);
+  populateTeamSelect(f_home, f_league.value);
+  // avoid defaulting both selects to the same team
+  if (f_home.value === f_away.value && f_home.options.length > 1) f_home.selectedIndex = 1;
+  refreshSideOptions();
+  updateEventIdPreview();
+}
+
+f_league.addEventListener("change", () => {
+  refreshMarketOptions();
+  refreshTeamPickers();
+});
+f_market.addEventListener("change", updateSideVisibility);
+f_date.addEventListener("change", updateEventIdPreview);
+bindOtherToggle(f_away, awayOtherLabel, f_away_other, () => {
+  refreshSideOptions();
+  updateEventIdPreview();
+});
+bindOtherToggle(f_home, homeOtherLabel, f_home_other, () => {
+  refreshSideOptions();
+  updateEventIdPreview();
+});
+f_away.addEventListener("change", () => {
+  refreshSideOptions();
+  updateEventIdPreview();
+});
+f_home.addEventListener("change", () => {
+  refreshSideOptions();
+  updateEventIdPreview();
+});
+
 refreshMarketOptions();
+refreshTeamPickers();
 
 // ===================== Unit size =====================
 const f_unitsize = document.getElementById("f_unitsize");
@@ -247,16 +317,26 @@ tradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setMsg(tradeMsg, "");
 
-  const teamCode = f_team.value === "OTHER" ? f_team_other.value.trim().toUpperCase() : f_team.value;
-  const outcome = f_market.value === "ML" ? `${teamCode} ML` : MARKET_LABELS[f_market.value];
+  const awayCode = resolveTeamCode(f_away, f_away_other);
+  const homeCode = resolveTeamCode(f_home, f_home_other);
+  if (!awayCode || !homeCode) {
+    setMsg(tradeMsg, "Pick both an away and home team.", "error");
+    return;
+  }
+  if (awayCode === homeCode) {
+    setMsg(tradeMsg, "Away and home teams can't be the same.", "error");
+    return;
+  }
+  const eventId = composeEventId();
+  const outcome = f_market.value === "ML" ? `${f_side.value} ML` : MARKET_LABELS[f_market.value];
   const units = parseFloat(f_units.value);
 
   const payload = {
     // user_id is intentionally omitted — the trades table defaults it to
     // auth.uid(), so no extra getUser()/getSession() round-trip is needed here.
-    trade_date: document.getElementById("f_date").value,
+    trade_date: f_date.value,
     league: f_league.value,
-    event: document.getElementById("f_event").value.trim(),
+    event: eventId,
     outcome,
     price: parseFloat(f_price.value),
     units,
@@ -300,8 +380,11 @@ tradeForm.addEventListener("submit", async (e) => {
     return;
   }
   setMsg(tradeMsg, "Trade logged.", "ok");
+  const lastDate = f_date.value;
   tradeForm.reset();
+  f_date.value = lastDate; // keep the date — handy when logging several markets on one game
   refreshMarketOptions();
+  refreshTeamPickers();
   updatePayoutPreview();
   loadTrades();
 });
@@ -449,4 +532,5 @@ function renderRiskFlags(openTrades) {
 }
 
 // default the date field to today
-document.getElementById("f_date").value = new Date().toISOString().slice(0, 10);
+f_date.value = new Date().toISOString().slice(0, 10);
+updateEventIdPreview();

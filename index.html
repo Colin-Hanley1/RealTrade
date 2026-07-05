@@ -84,9 +84,21 @@
               <option value="WNBA">WNBA</option>
             </select>
           </label>
-          <label class="span-2">
-            <span>Event</span>
-            <input type="text" id="f_event" required placeholder="Yankees @ Red Sox 7/5">
+          <label>
+            <span>Away</span>
+            <select id="f_away" required></select>
+          </label>
+          <label id="awayOtherLabel" hidden>
+            <span>Away code</span>
+            <input type="text" id="f_away_other" placeholder="e.g. TOR" maxlength="4" style="text-transform: uppercase;">
+          </label>
+          <label>
+            <span>Home</span>
+            <select id="f_home" required></select>
+          </label>
+          <label id="homeOtherLabel" hidden>
+            <span>Home code</span>
+            <input type="text" id="f_home_other" placeholder="e.g. TOR" maxlength="4" style="text-transform: uppercase;">
           </label>
           <label>
             <span>Market</span>
@@ -96,13 +108,9 @@
               <option value="YRFI">YRFI</option>
             </select>
           </label>
-          <label id="teamLabel">
-            <span>Team (side)</span>
-            <select id="f_team"></select>
-          </label>
-          <label id="teamOtherLabel" hidden>
-            <span>Team code</span>
-            <input type="text" id="f_team_other" placeholder="e.g. TOR" maxlength="4" style="text-transform: uppercase;">
+          <label id="sideLabel">
+            <span>Side</span>
+            <select id="f_side"></select>
           </label>
           <label>
             <span>Price (¢ implied %)</span>
@@ -113,6 +121,7 @@
             <input type="number" id="f_units" required min="0.1" step="0.1" placeholder="1">
           </label>
         </div>
+        <div class="event-id-preview" id="eventIdPreview">Event ID: —</div>
         <label class="full">
           <span>Notes</span>
           <textarea id="f_notes" rows="2" placeholder="Optional context, reasoning, hedge plan…"></textarea>
@@ -135,7 +144,7 @@
             <option value="lost">Lost</option>
             <option value="push">Push</option>
           </select>
-          <input type="text" id="filterEvent" placeholder="Filter by event…">
+          <input type="text" id="filterEvent" placeholder="Filter by team code or date…">
         </div>
       </div>
       <div class="table-wrap">
@@ -182,7 +191,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.0/dist/umd/supabase.js"></script>
-<script src="config.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

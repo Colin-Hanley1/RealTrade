@@ -235,7 +235,6 @@ input:focus, textarea:focus, select:focus {
 
 .trade-form { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; max-width: 560px; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-.field-grid label.span-2 { grid-column: span 2; }
 label.full { margin-bottom: 1rem; }
 
 .payout-preview {
@@ -246,6 +245,13 @@ label.full { margin-bottom: 1rem; }
   padding: 0.6rem 0.75rem;
   border-radius: var(--radius);
   margin-bottom: 1.1rem;
+}
+
+.event-id-preview {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  margin: -0.5rem 0 1rem;
 }
 
 /* ===================== History ===================== */
@@ -340,6 +346,5 @@ label.full { margin-bottom: 1rem; }
   .topbar { padding: 0.75rem 1rem; }
   .main { padding: 1.5rem 1rem 3rem; }
   .field-grid { grid-template-columns: 1fr; }
-  .field-grid label.span-2 { grid-column: span 1; }
   .tabs { order: 3; width: 100%; }
 }
