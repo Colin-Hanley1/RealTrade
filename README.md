@@ -31,10 +31,11 @@ create table trades (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id),
   trade_date date not null,
+  league text not null check (league in ('MLB','WNBA')),
   event text not null,
   outcome text not null,
   price numeric not null check (price > 0 and price < 100),  -- implied probability, %
-  stake numeric not null check (stake > 0),                  -- $ risked
+  stake numeric not null check (stake > 0),                  -- Rax risked
   status text not null default 'open' check (status in ('open','won','lost','push')),
   notes text,
   created_at timestamptz not null default now()
@@ -46,6 +47,13 @@ create policy "select own trades" on trades for select using (auth.uid() = user_
 create policy "insert own trades" on trades for insert with check (auth.uid() = user_id);
 create policy "update own trades" on trades for update using (auth.uid() = user_id);
 create policy "delete own trades" on trades for delete using (auth.uid() = user_id);
+```
+
+If you already created the table before the `league` column existed, migrate it instead:
+
+```sql
+alter table trades add column league text not null default 'MLB' check (league in ('MLB','WNBA'));
+alter table trades alter column league drop default;
 ```
 
 ## 3. Create your one user account
@@ -83,8 +91,19 @@ branch → Branch: main / (root)**. Your site will be live at
 
 ## How the numbers work
 
-- **Payout if correct** = `stake / (price / 100)` (e.g. $45 at 50% → $90).
+- Stakes and P&L are denominated in **Rax** (RealSports' in-app currency), not USD.
+- **Payout if correct** = `stake / (price / 100)` (e.g. 45 Rax at 50% → 90 Rax).
 - **P&L** on a won trade = payout − stake; on a lost trade = −stake; push = 0.
 - **Lose-lose flag**: for each event with two or more *open* trades on different outcomes,
   sums their entry prices. ≥100% combined means you cannot come out ahead on any outcome
   (red flag); 85–99% is a thin-margin warning (yellow flag).
+
+## League / Market fields
+
+- **League** is limited to MLB and WNBA.
+- **Market** is Moneyline, NRFI, or YRFI for MLB; WNBA only offers Moneyline (NRFI/YRFI are
+  first-inning baseball props and don't apply). Moneyline additionally asks which team you
+  took, picked by abbreviation (NYY, BOS, ATH, ...); NRFI/YRFI are themselves the pick, so no
+  team field is needed.
+- The team list (`TEAM_ABBR` in `app.js`) isn't guaranteed exhaustive (e.g. brand-new
+  expansion franchises may be missing) — pick **Other…** to type any code not listed.

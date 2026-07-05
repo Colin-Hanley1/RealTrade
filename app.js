@@ -17,6 +17,73 @@ const userEmailEl = document.getElementById("userEmail");
 const tradeForm = document.getElementById("tradeForm");
 const tradeMsg = document.getElementById("tradeMsg");
 const payoutPreview = document.getElementById("payoutPreview");
+const f_league = document.getElementById("f_league");
+const f_market = document.getElementById("f_market");
+const f_team = document.getElementById("f_team");
+const f_team_other = document.getElementById("f_team_other");
+const teamLabel = document.getElementById("teamLabel");
+const teamOtherLabel = document.getElementById("teamOtherLabel");
+
+const LEAGUE_MARKETS = {
+  MLB: ["ML", "NRFI", "YRFI"],
+  WNBA: ["ML"],
+};
+const MARKET_LABELS = { ML: "Moneyline", NRFI: "NRFI", YRFI: "YRFI" };
+
+// Not exhaustive (new expansion franchises may be missing) — pick "Other"
+// to type any code not listed here.
+const TEAM_ABBR = {
+  MLB: [
+    ["ARI", "Diamondbacks"], ["ATL", "Braves"], ["ATH", "Athletics"], ["BAL", "Orioles"],
+    ["BOS", "Red Sox"], ["CHC", "Cubs"], ["CWS", "White Sox"], ["CIN", "Reds"],
+    ["CLE", "Guardians"], ["COL", "Rockies"], ["DET", "Tigers"], ["HOU", "Astros"],
+    ["KC", "Royals"], ["LAA", "Angels"], ["LAD", "Dodgers"], ["MIA", "Marlins"],
+    ["MIL", "Brewers"], ["MIN", "Twins"], ["NYM", "Mets"], ["NYY", "Yankees"],
+    ["PHI", "Phillies"], ["PIT", "Pirates"], ["SD", "Padres"], ["SF", "Giants"],
+    ["SEA", "Mariners"], ["STL", "Cardinals"], ["TB", "Rays"], ["TEX", "Rangers"],
+    ["TOR", "Blue Jays"], ["WSH", "Nationals"],
+  ],
+  WNBA: [
+    ["ATL", "Dream"], ["CHI", "Sky"], ["CONN", "Sun"], ["DAL", "Wings"],
+    ["GS", "Valkyries"], ["IND", "Fever"], ["LA", "Sparks"], ["LV", "Aces"],
+    ["MIN", "Lynx"], ["NY", "Liberty"], ["PHX", "Mercury"], ["SEA", "Storm"],
+    ["WAS", "Mystics"],
+  ],
+};
+
+function populateTeamOptions() {
+  const teams = TEAM_ABBR[f_league.value];
+  f_team.innerHTML = teams.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join("") + `<option value="OTHER">Other…</option>`;
+}
+
+function refreshMarketOptions() {
+  const allowed = LEAGUE_MARKETS[f_league.value];
+  for (const opt of f_market.options) {
+    opt.hidden = !allowed.includes(opt.value);
+  }
+  if (!allowed.includes(f_market.value)) f_market.value = allowed[0];
+  populateTeamOptions();
+  updateTeamVisibility();
+}
+
+function updateTeamVisibility() {
+  const needsTeam = f_market.value === "ML";
+  teamLabel.hidden = !needsTeam;
+  f_team.required = needsTeam;
+  updateTeamOtherVisibility();
+}
+
+function updateTeamOtherVisibility() {
+  const showOther = !teamLabel.hidden && f_team.value === "OTHER";
+  teamOtherLabel.hidden = !showOther;
+  f_team_other.required = showOther;
+  if (!showOther) f_team_other.value = "";
+}
+
+f_league.addEventListener("change", refreshMarketOptions);
+f_market.addEventListener("change", updateTeamVisibility);
+f_team.addEventListener("change", updateTeamOtherVisibility);
+refreshMarketOptions();
 
 const historyBody = document.getElementById("historyBody");
 const historyEmpty = document.getElementById("historyEmpty");
@@ -32,7 +99,7 @@ const statPnl = document.getElementById("statPnl");
 // ===================== Helpers =====================
 function money(n) {
   const sign = n < 0 ? "-" : "";
-  return `${sign}$${Math.abs(n).toFixed(2)}`;
+  return `${sign}${Math.abs(n).toFixed(2)} Rax`;
 }
 
 function shares(price, stake) {
@@ -135,7 +202,7 @@ function updatePayoutPreview() {
     const payout = shares(price, stake);
     payoutPreview.textContent = `Stake ${money(stake)} at ${price}% → returns ${money(payout)} if correct`;
   } else {
-    payoutPreview.textContent = "Stake $0.00 at 0% → returns $0.00 if correct";
+    payoutPreview.textContent = "Stake 0.00 Rax at 0% → returns 0.00 Rax if correct";
   }
 }
 f_price.addEventListener("input", updatePayoutPreview);
@@ -145,14 +212,16 @@ tradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setMsg(tradeMsg, "");
 
-  const { data: userData } = await sb.auth.getUser();
-  const user_id = userData.user.id;
+  const teamCode = f_team.value === "OTHER" ? f_team_other.value.trim().toUpperCase() : f_team.value;
+  const outcome = f_market.value === "ML" ? `${teamCode} ML` : MARKET_LABELS[f_market.value];
 
   const payload = {
-    user_id,
+    // user_id is intentionally omitted — the trades table defaults it to
+    // auth.uid(), so no extra getUser()/getSession() round-trip is needed here.
     trade_date: document.getElementById("f_date").value,
+    league: f_league.value,
     event: document.getElementById("f_event").value.trim(),
-    outcome: document.getElementById("f_outcome").value.trim(),
+    outcome,
     price: parseFloat(f_price.value),
     stake: parseFloat(f_stake.value),
     notes: document.getElementById("f_notes").value.trim() || null,
@@ -166,6 +235,7 @@ tradeForm.addEventListener("submit", async (e) => {
   }
   setMsg(tradeMsg, "Trade logged.", "ok");
   tradeForm.reset();
+  refreshMarketOptions();
   updatePayoutPreview();
   loadTrades();
 });
@@ -203,6 +273,7 @@ function renderHistory() {
 
     tr.innerHTML = `
       <td>${t.trade_date}</td>
+      <td>${escapeHtml(t.league || "—")}</td>
       <td>${escapeHtml(t.event)}</td>
       <td>${escapeHtml(t.outcome)}</td>
       <td>${t.price}%</td>

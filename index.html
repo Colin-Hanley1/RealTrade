@@ -68,19 +68,38 @@
             <input type="date" id="f_date" required>
           </label>
           <label>
+            <span>League</span>
+            <select id="f_league" required>
+              <option value="MLB">MLB</option>
+              <option value="WNBA">WNBA</option>
+            </select>
+          </label>
+          <label class="span-2">
             <span>Event</span>
             <input type="text" id="f_event" required placeholder="Yankees @ Red Sox 7/5">
           </label>
           <label>
-            <span>Outcome / Side</span>
-            <input type="text" id="f_outcome" required placeholder="Yankees ML">
+            <span>Market</span>
+            <select id="f_market" required>
+              <option value="ML">Moneyline</option>
+              <option value="NRFI">NRFI</option>
+              <option value="YRFI">YRFI</option>
+            </select>
+          </label>
+          <label id="teamLabel">
+            <span>Team (side)</span>
+            <select id="f_team"></select>
+          </label>
+          <label id="teamOtherLabel" hidden>
+            <span>Team code</span>
+            <input type="text" id="f_team_other" placeholder="e.g. TOR" maxlength="4" style="text-transform: uppercase;">
           </label>
           <label>
             <span>Price (¢ implied %)</span>
             <input type="number" id="f_price" required min="1" max="99" step="0.1" placeholder="50">
           </label>
           <label>
-            <span>Stake ($)</span>
+            <span>Stake (Rax)</span>
             <input type="number" id="f_stake" required min="0.01" step="0.01" placeholder="45">
           </label>
         </div>
@@ -113,7 +132,7 @@
         <table class="ledger-table" id="historyTable">
           <thead>
             <tr>
-              <th>Date</th><th>Event</th><th>Outcome</th><th>Price</th><th>Stake</th>
+              <th>Date</th><th>League</th><th>Event</th><th>Outcome</th><th>Price</th><th>Stake</th>
               <th>Status</th><th>P&amp;L</th><th></th>
             </tr>
           </thead>
@@ -153,7 +172,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.0/dist/umd/supabase.js"></script>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="config.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
