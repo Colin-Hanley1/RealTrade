@@ -69,12 +69,16 @@ function resolveTeamCode(selectEl, otherInputEl) {
   return selectEl.value === "OTHER" ? otherInputEl.value.trim().toUpperCase() : selectEl.value;
 }
 
+function updateTeamOtherVisibilityFor(selectEl, otherLabelEl, otherInputEl) {
+  const show = selectEl.value === "OTHER";
+  otherLabelEl.hidden = !show;
+  otherInputEl.required = show;
+  if (!show) otherInputEl.value = "";
+}
+
 function bindOtherToggle(selectEl, otherLabelEl, otherInputEl, onChange) {
   function update() {
-    const show = selectEl.value === "OTHER";
-    otherLabelEl.hidden = !show;
-    otherInputEl.required = show;
-    if (!show) otherInputEl.value = "";
+    updateTeamOtherVisibilityFor(selectEl, otherLabelEl, otherInputEl);
     onChange();
   }
   selectEl.addEventListener("change", update);
@@ -411,11 +415,30 @@ tradeForm.addEventListener("submit", async (e) => {
     return;
   }
   setMsg(tradeMsg, "Trade logged.", "ok");
+  // Keep date/league/away/home — logging a second market or side on the same
+  // game is the common case, and silently resetting these to unrelated
+  // default teams meant a follow-up trade could land on the wrong matchup
+  // entirely, breaking the same-event checks above.
   const lastDate = f_date.value;
+  const lastLeague = f_league.value;
+  const lastAway = f_away.value;
+  const lastAwayOther = f_away_other.value;
+  const lastHome = f_home.value;
+  const lastHomeOther = f_home_other.value;
   tradeForm.reset();
-  f_date.value = lastDate; // keep the date — handy when logging several markets on one game
+  f_date.value = lastDate;
+  f_league.value = lastLeague;
   refreshMarketOptions();
-  refreshTeamPickers();
+  populateTeamSelect(f_away, f_league.value);
+  populateTeamSelect(f_home, f_league.value);
+  f_away.value = lastAway;
+  f_away_other.value = lastAwayOther;
+  f_home.value = lastHome;
+  f_home_other.value = lastHomeOther;
+  updateTeamOtherVisibilityFor(f_away, awayOtherLabel, f_away_other);
+  updateTeamOtherVisibilityFor(f_home, homeOtherLabel, f_home_other);
+  refreshSideOptions();
+  updateEventIdPreview();
   updatePayoutPreview();
   loadTrades();
 });
