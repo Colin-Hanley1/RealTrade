@@ -33,6 +33,7 @@ create table trades (
   trade_date date not null,
   league text not null check (league in ('MLB','WNBA')),
   event text not null,
+  market text check (market in ('ML','NRFI','YRFI')),
   outcome text not null,
   price numeric not null check (price > 0 and price < 100),  -- implied probability, %
   units numeric not null check (units > 0),                  -- stake in bet-sizing units
@@ -61,15 +62,20 @@ create policy "insert own settings" on settings for insert with check (auth.uid(
 create policy "update own settings" on settings for update using (auth.uid() = user_id);
 ```
 
-If you already created the `trades` table before the `league`/`units` columns existed,
-migrate it instead:
+If you already created the `trades` table before the `league`/`units`/`market` columns
+existed, migrate it instead:
 
 ```sql
 alter table trades add column league text not null default 'MLB' check (league in ('MLB','WNBA'));
 alter table trades alter column league drop default;
 alter table trades add column units numeric not null default 1 check (units > 0);
 alter table trades alter column units drop default;
+alter table trades add column market text check (market in ('ML','NRFI','YRFI'));
 ```
+
+`market` is deliberately nullable — rows logged before this column existed will have
+`market = null`, and the app falls back to inferring ML vs NRFI/YRFI from the `outcome` text
+for those older rows (see `marketGroupOfTrade` in `app.js`), so no backfill is required.
 
 ## 3. Create your one user account
 
@@ -115,10 +121,13 @@ branch → Branch: main / (root)**. Your site will be live at
   retroactively change past trades' recorded stakes.
 - **Payout if correct** = `stake / (price / 100)` (e.g. 45 Rax at 50% → 90 Rax).
 - **P&L** on a won trade = payout − stake; on a lost trade = −stake; push = 0.
-- **Event flags**: for each event with two or more *open* trades on different outcomes, the
-  app computes the actual worst-case and best-case P&L from your real stakes (not an
-  idealized even split — two legs priced to sum to 100% can still net very differently
-  depending on how much you actually put on each side):
+- **Event flags**: for each event with two or more *open* trades on different outcomes **in
+  the same market family**, the app computes the actual worst-case and best-case P&L from
+  your real stakes (not an idealized even split — two legs priced to sum to 100% can still
+  net very differently depending on how much you actually put on each side). ML and
+  NRFI/YRFI are separate market families (NRFI and YRFI share one, since they're literally
+  opposite sides of the same first-inning proposition) — an open ML trade and an open NRFI
+  trade on the same game are unrelated bets and never get flagged against each other:
   - 🔴 **Guaranteed loss** — even your best-case outcome is a loss.
   - 🟢 **Arbitrage** — every outcome is a profit; the flag shows the guaranteed amount.
   - 🟡 **Imbalanced hedge** — could go either way; shows the full loss-to-profit range.

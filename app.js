@@ -346,7 +346,8 @@ function updatePositionPreview() {
 
   const outcome = f_market.value === "ML" ? `${f_side.value} ML` : MARKET_LABELS[f_market.value];
   const eventKey = eventId.toLowerCase();
-  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const marketGroup = marketGroupCode(f_market.value);
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey && marketGroupOfTrade(t) === marketGroup);
   const risk = evaluateEventRisk([...existingOpen, { outcome, price, stake }]);
 
   if (!risk) {
@@ -377,7 +378,8 @@ function computeHedgeSuggestion() {
   const outcome = f_market.value === "ML" ? `${f_side.value} ML` : MARKET_LABELS[f_market.value];
   const eventKey = eventId.toLowerCase();
   const outcomeKey = outcome.trim().toLowerCase();
-  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const marketGroup = marketGroupCode(f_market.value);
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey && marketGroupOfTrade(t) === marketGroup);
   const opposing = existingOpen.filter((t) => t.outcome.trim().toLowerCase() !== outcomeKey);
   if (opposing.length === 0) return null; // nothing open yet on another side to hedge against
 
@@ -454,6 +456,7 @@ tradeForm.addEventListener("submit", async (e) => {
     trade_date: f_date.value,
     league: f_league.value,
     event: eventId,
+    market: f_market.value,
     outcome,
     price: parseFloat(f_price.value),
     units,
@@ -471,10 +474,12 @@ tradeForm.addEventListener("submit", async (e) => {
   }
 
   // Active guard: check this trade against your other *open* positions on
-  // the same event before it ever reaches the DB — the Dashboard flag alone
-  // only warns after the fact, once you happen to look at that tab.
+  // the same event (and same market family — ML vs NRFI/YRFI are unrelated
+  // bets, not opposing legs) before it ever reaches the DB — the Dashboard
+  // flag alone only warns after the fact, once you happen to look at that tab.
   const eventKey = payload.event.toLowerCase();
-  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const marketGroup = marketGroupCode(payload.market);
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey && marketGroupOfTrade(t) === marketGroup);
   const hypothetical = { outcome: payload.outcome, price: payload.price, stake: payload.stake };
   const risk = evaluateEventRisk([...existingOpen, hypothetical]);
   let arbitrageNote = "";
@@ -659,6 +664,22 @@ function renderDashboard() {
   renderRiskFlags(open);
 }
 
+// Only trades on the same event AND the same market family can ever be
+// opposing legs of one hedge/arbitrage — an ML position and an NRFI position
+// on the same game are unrelated bets, not opposing sides of anything, so
+// they must never be mixed into the same risk/hedge computation. NRFI and
+// YRFI share a group since they're literally opposite sides of one
+// proposition (runs in the 1st inning or not).
+function marketGroupCode(market) {
+  return market === "ML" ? "ML" : "RFI";
+}
+function marketGroupOfTrade(trade) {
+  if (trade.market) return marketGroupCode(trade.market);
+  // Backward-compatible fallback for rows saved before the `market` column
+  // existed — infer from the outcome string instead.
+  return /\sML$/i.test(trade.outcome || "") ? "ML" : "RFI";
+}
+
 // Shared by the passive Dashboard flags, the active pre-submit check, and the
 // live New Trade preview — takes a set of same-event trades (price/outcome/
 // stake) and computes the actual worst-case and best-case P&L across every
@@ -714,7 +735,9 @@ function evaluateDoubleUps(eventTrades) {
 function renderRiskFlags(openTrades) {
   const groups = {};
   for (const t of openTrades) {
-    const key = t.event.trim().toLowerCase();
+    // Group by event AND market family — an open ML trade and an open NRFI
+    // trade on the same game are unrelated bets, never opposing hedge legs.
+    const key = `${t.event.trim().toLowerCase()}|${marketGroupOfTrade(t)}`;
     if (!groups[key]) groups[key] = { label: t.event.trim(), trades: [] };
     groups[key].trades.push(t);
   }
