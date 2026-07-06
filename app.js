@@ -208,7 +208,11 @@ const statPnl = document.getElementById("statPnl");
 // Rax is a whole-number currency — always round down, never to nearest/up,
 // so displayed and stored amounts never overstate stake or payout.
 function floorRax(n) {
-  return Math.floor(n);
+  // Division like 55/(55/100) lands on 99.99999999999999 in JS float math,
+  // not exactly 100 — flooring that directly would shave off a whole Rax it
+  // shouldn't. Rounding to 6dp first clears that noise while still flooring
+  // any genuinely fractional amount (e.g. 33.333) correctly.
+  return Math.floor(Math.round(n * 1e6) / 1e6);
 }
 
 function money(n) {
@@ -310,6 +314,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 // ===================== New trade form =====================
 const f_price = document.getElementById("f_price");
 const f_units = document.getElementById("f_units");
+const positionPreview = document.getElementById("positionPreview");
 
 function updatePayoutPreview() {
   const price = parseFloat(f_price.value);
@@ -324,6 +329,106 @@ function updatePayoutPreview() {
 }
 f_price.addEventListener("input", updatePayoutPreview);
 f_units.addEventListener("input", updatePayoutPreview);
+
+// Live "what would this do to my position" preview — lets you judge the
+// arbitrage/hedge outcome against your other open trades on this event
+// *before* logging, not just after via the Dashboard.
+function updatePositionPreview() {
+  const eventId = composeEventId();
+  const price = parseFloat(f_price.value);
+  const units = parseFloat(f_units.value);
+  const stake = units > 0 ? floorRax(units * unitSize) : 0;
+
+  if (!eventId || !(price > 0 && price < 100) || stake <= 0) {
+    positionPreview.hidden = true;
+    return;
+  }
+
+  const outcome = f_market.value === "ML" ? `${f_side.value} ML` : MARKET_LABELS[f_market.value];
+  const eventKey = eventId.toLowerCase();
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const risk = evaluateEventRisk([...existingOpen, { outcome, price, stake }]);
+
+  if (!risk) {
+    positionPreview.hidden = true;
+    return;
+  }
+  positionPreview.hidden = false;
+  positionPreview.className = `position-preview ${risk.level}`;
+  positionPreview.textContent = `If logged: ${riskText(risk, eventId)}`;
+}
+// Suggests the units for *this* leg that maximizes guaranteed profit against
+// your other open positions on this event. Equalizing this leg's payout with
+// the smallest existing opposing payout is provably optimal: profit rises as
+// this leg's payout climbs toward that value (each extra unit still adds
+// more payout than it costs), then falls past it (extra stake with no
+// upside, since the *other* side is now the binding constraint) — so the
+// peak sits exactly at the equalization point.
+const hedgeSuggestion = document.getElementById("hedgeSuggestion");
+const hedgeSuggestionText = document.getElementById("hedgeSuggestionText");
+const useHedgeSuggestion = document.getElementById("useHedgeSuggestion");
+let currentHedgeSuggestion = null;
+
+function computeHedgeSuggestion() {
+  const eventId = composeEventId();
+  const price = parseFloat(f_price.value);
+  if (!eventId || !(price > 0 && price < 100)) return null;
+
+  const outcome = f_market.value === "ML" ? `${f_side.value} ML` : MARKET_LABELS[f_market.value];
+  const eventKey = eventId.toLowerCase();
+  const outcomeKey = outcome.trim().toLowerCase();
+  const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
+  const opposing = existingOpen.filter((t) => t.outcome.trim().toLowerCase() !== outcomeKey);
+  if (opposing.length === 0) return null; // nothing open yet on another side to hedge against
+
+  const payoutByOutcome = {};
+  for (const t of opposing) {
+    const key = t.outcome.trim().toLowerCase();
+    payoutByOutcome[key] = (payoutByOutcome[key] || 0) + shares(t.price, Number(t.stake));
+  }
+  const targetPayout = Math.min(...Object.values(payoutByOutcome));
+  // Stake needed at *this* leg's price so its payout matches targetPayout
+  // (payout = stake / (price/100), so stake = payout * (price/100)).
+  const suggestedStake = floorRax(targetPayout * (price / 100));
+  if (suggestedStake <= 0) return null;
+  const suggestedUnits = Math.round((suggestedStake / unitSize) * 10) / 10;
+  if (suggestedUnits <= 0) return null;
+
+  const hypo = { outcome, price, stake: floorRax(suggestedUnits * unitSize) };
+  const risk = evaluateEventRisk([...existingOpen, hypo]);
+
+  return { suggestedUnits, guaranteedProfit: risk ? risk.worst : null };
+}
+
+// The button is a stable DOM node (never recreated) with its click listener
+// attached once, below — recreating it on every keystroke risked the click
+// landing on a button that had just been replaced out from under it (e.g.
+// the units field's blur-triggered "change" firing a rerender mid-click).
+function updateHedgeSuggestion() {
+  currentHedgeSuggestion = computeHedgeSuggestion();
+  if (!currentHedgeSuggestion) {
+    hedgeSuggestion.hidden = true;
+    return;
+  }
+  hedgeSuggestion.hidden = false;
+  const profitText = currentHedgeSuggestion.guaranteedProfit !== null
+    ? ` — locks in a guaranteed profit of ${money(currentHedgeSuggestion.guaranteedProfit)}`
+    : "";
+  hedgeSuggestionText.textContent = `Best hedge: ${currentHedgeSuggestion.suggestedUnits}u${profitText}`;
+}
+
+useHedgeSuggestion.addEventListener("click", () => {
+  if (!currentHedgeSuggestion) return;
+  f_units.value = currentHedgeSuggestion.suggestedUnits;
+  updatePayoutPreview();
+  updatePositionPreview();
+  updateHedgeSuggestion();
+});
+
+[f_price, f_units, f_away, f_home, f_away_other, f_home_other, f_market, f_side, f_date, f_league].forEach((el) => {
+  el.addEventListener("input", () => { updatePositionPreview(); updateHedgeSuggestion(); });
+  el.addEventListener("change", () => { updatePositionPreview(); updateHedgeSuggestion(); });
+});
 
 tradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -370,17 +475,22 @@ tradeForm.addEventListener("submit", async (e) => {
   // only warns after the fact, once you happen to look at that tab.
   const eventKey = payload.event.toLowerCase();
   const existingOpen = trades.filter((t) => t.status === "open" && t.event.trim().toLowerCase() === eventKey);
-  const risk = evaluateEventRisk([...existingOpen, { outcome: payload.outcome, price: payload.price }]);
+  const hypothetical = { outcome: payload.outcome, price: payload.price, stake: payload.stake };
+  const risk = evaluateEventRisk([...existingOpen, hypothetical]);
+  let arbitrageNote = "";
   if (risk && risk.level === "red") {
-    const lines = existingOpen.map((t) => `  • ${t.outcome} @ ${t.price}%`).join("\n");
+    const lines = existingOpen.map((t) => `  • ${t.outcome} @ ${t.price}% (${money(t.stake)})`).join("\n");
     const proceed = confirm(
-      `This creates a GUARANTEED LOSS on "${payload.event}":\n${lines}\n  • ${payload.outcome} @ ${payload.price}% (this trade)\n\n` +
-      `Combined price: ${risk.sum.toFixed(1)}% — no outcome can be profitable.\n\nLog it anyway?`
+      `This creates a GUARANTEED LOSS on "${payload.event}":\n${lines}\n  • ${payload.outcome} @ ${payload.price}% (${money(payload.stake)}, this trade)\n\n` +
+      `Even your best-case outcome nets ${money(risk.best)} — no outcome can be profitable.\n\nLog it anyway?`
     );
     if (!proceed) {
       setMsg(tradeMsg, "Trade not logged — guaranteed-loss combo cancelled.", "error");
       return;
     }
+  } else if (risk && risk.level === "green") {
+    // Good news doesn't need a blocking confirm — just surface it.
+    arbitrageNote = ` Arbitrage locked in — guaranteed profit of ${money(risk.worst)} regardless of outcome.`;
   }
 
   // Separate guard: same event, same side already open — not inherently bad
@@ -414,7 +524,7 @@ tradeForm.addEventListener("submit", async (e) => {
     setMsg(tradeMsg, error.message, "error");
     return;
   }
-  setMsg(tradeMsg, "Trade logged.", "ok");
+  setMsg(tradeMsg, `Trade logged.${arbitrageNote}`, "ok");
   // Keep date/league/away/home — logging a second market or side on the same
   // game is the common case, and silently resetting these to unrelated
   // default teams meant a follow-up trade could land on the wrong matchup
@@ -440,6 +550,8 @@ tradeForm.addEventListener("submit", async (e) => {
   refreshSideOptions();
   updateEventIdPreview();
   updatePayoutPreview();
+  updatePositionPreview();
+  updateHedgeSuggestion();
   loadTrades();
 });
 
@@ -547,16 +659,44 @@ function renderDashboard() {
   renderRiskFlags(open);
 }
 
-// Shared by the passive Dashboard flags and the active pre-submit check
-// below — takes a set of same-event trades (price/outcome only needed) and
-// reports whether they combine into a guaranteed-loss or thin-margin spot.
+// Shared by the passive Dashboard flags, the active pre-submit check, and the
+// live New Trade preview — takes a set of same-event trades (price/outcome/
+// stake) and computes the actual worst-case and best-case P&L across every
+// distinct outcome, from the real stakes entered (not an idealized/
+// proportional allocation — two trades at prices summing to 100% can still
+// net very differently depending on how much is actually staked on each
+// side, so this reflects what you'd really walk away with).
 function evaluateEventRisk(eventTrades) {
-  const distinctOutcomes = new Set(eventTrades.map((t) => t.outcome.trim().toLowerCase()));
-  if (distinctOutcomes.size < 2) return null;
-  const sum = eventTrades.reduce((s, t) => s + Number(t.price), 0);
-  if (sum >= 100) return { level: "red", sum, distinctCount: distinctOutcomes.size };
-  if (sum >= 85) return { level: "yellow", sum, distinctCount: distinctOutcomes.size };
-  return null;
+  const bySide = {};
+  for (const t of eventTrades) {
+    const key = t.outcome.trim().toLowerCase();
+    if (!bySide[key]) bySide[key] = { stake: 0, payout: 0 };
+    const stake = Number(t.stake);
+    bySide[key].stake += stake;
+    bySide[key].payout += shares(t.price, stake);
+  }
+  const outcomes = Object.values(bySide);
+  if (outcomes.length < 2) return null;
+
+  const totalStake = eventTrades.reduce((s, t) => s + Number(t.stake), 0);
+  const payouts = outcomes.map((o) => o.payout);
+  const worst = Math.min(...payouts) - totalStake; // P&L if the worst-for-you outcome hits
+  const best = Math.max(...payouts) - totalStake; // P&L if the best-for-you outcome hits
+  const distinctCount = outcomes.length;
+
+  if (best < 0) return { level: "red", worst, best, distinctCount };
+  if (worst > 0) return { level: "green", worst, best, distinctCount };
+  return { level: "yellow", worst, best, distinctCount };
+}
+
+function riskText(risk, label) {
+  if (risk.level === "red") {
+    return `Guaranteed loss on "${label}" — even your best-case outcome nets ${money(risk.best)}`;
+  }
+  if (risk.level === "green") {
+    return `Arbitrage locked in on "${label}" — guaranteed profit of ${money(risk.worst)} regardless of outcome`;
+  }
+  return `Imbalanced hedge on "${label}" — ranges from ${money(risk.worst)} to ${money(risk.best)} depending on which side hits`;
 }
 
 // Same event, same outcome, 2+ open trades — flags scaling into one side,
@@ -583,10 +723,7 @@ function renderRiskFlags(openTrades) {
   for (const key in groups) {
     const group = groups[key];
     const risk = evaluateEventRisk(group.trades);
-    if (risk) {
-      const label = risk.level === "red" ? "Guaranteed loss" : "Thin margin";
-      flags.push({ level: risk.level, text: `${label} — combined price ${risk.sum.toFixed(1)}% across ${risk.distinctCount} outcomes on "${group.label}"` });
-    }
+    if (risk) flags.push({ level: risk.level, text: riskText(risk, group.label) });
     for (const side of evaluateDoubleUps(group.trades)) {
       const units = side.trades.reduce((s, t) => s + Number(t.units || 0), 0);
       const stake = side.trades.reduce((s, t) => s + Number(t.stake), 0);
@@ -598,7 +735,8 @@ function renderRiskFlags(openTrades) {
   for (const flag of flags) {
     const div = document.createElement("div");
     div.className = `risk-flag ${flag.level}`;
-    const tag = flag.level === "red" ? "Lose-Lose" : flag.level === "blue" ? "Doubled Up" : "Warning";
+    const tags = { red: "Lose-Lose", blue: "Doubled Up", green: "Arbitrage", yellow: "Imbalanced" };
+    const tag = tags[flag.level] || "Warning";
     div.innerHTML = `<span class="flag-tag">${tag}</span><span>${escapeHtml(flag.text)}</span>`;
     riskFlagsEl.appendChild(div);
   }

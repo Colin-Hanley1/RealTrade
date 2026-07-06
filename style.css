@@ -256,6 +256,31 @@ label.full { margin-bottom: 1rem; }
   margin: -0.5rem 0 1rem;
 }
 
+.position-preview {
+  font-size: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px dashed;
+  margin-bottom: 1.1rem;
+}
+.position-preview.red { color: #ffb9b9; border-color: var(--red); background: rgba(239,91,91,0.08); }
+.position-preview.green { color: #a8f0c6; border-color: var(--green); background: rgba(62,207,126,0.08); }
+.position-preview.yellow { color: #f0e8a8; border-color: var(--yellow); background: rgba(232,210,61,0.08); }
+
+.hedge-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: #a8f0c6;
+  background: rgba(62,207,126,0.08);
+  border: 1px dashed var(--green);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.1rem;
+}
+.hedge-suggestion button { padding: 0.25rem 0.7rem; font-size: 0.7rem; }
+
 /* ===================== History ===================== */
 .filters { display: flex; gap: 0.6rem; margin-bottom: 1.2rem; }
 .filters select, .filters input { padding: 0.45rem 0.6rem; font-size: 0.8rem; }
@@ -329,6 +354,7 @@ label.full { margin-bottom: 1rem; }
 .risk-flag.red { background: rgba(239,91,91,0.08); border-color: var(--red); color: #ffb9b9; }
 .risk-flag.yellow { background: rgba(232,210,61,0.08); border-color: var(--yellow); color: #f0e8a8; }
 .risk-flag.blue { background: rgba(91,157,232,0.08); border-color: var(--blue); color: #b9d6ff; }
+.risk-flag.green { background: rgba(62,207,126,0.08); border-color: var(--green); color: #a8f0c6; }
 .risk-flag .flag-tag { text-transform: uppercase; font-weight: 700; font-size: 0.68rem; letter-spacing: 0.05em; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }

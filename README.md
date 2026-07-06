@@ -115,15 +115,26 @@ branch → Branch: main / (root)**. Your site will be live at
   retroactively change past trades' recorded stakes.
 - **Payout if correct** = `stake / (price / 100)` (e.g. 45 Rax at 50% → 90 Rax).
 - **P&L** on a won trade = payout − stake; on a lost trade = −stake; push = 0.
-- **Lose-lose flag**: for each event with two or more *open* trades on different outcomes,
-  sums their entry prices. ≥100% combined means you cannot come out ahead on any outcome
-  (red flag); 85–99% is a thin-margin warning (yellow flag).
-- **Doubled-up flag**: two or more *open* trades on the same event **and** same side (e.g.
-  two separate "BOS ML" trades) — not inherently bad, but easy to do by accident, so it's
-  called out (blue flag) with your combined units/Rax on that side.
-- Both flags fire two ways: passively on the Dashboard, and actively as a confirmation
-  dialog the moment you submit a trade that would create one — so you see it before it's
-  logged, not just after.
+- **Event flags**: for each event with two or more *open* trades on different outcomes, the
+  app computes the actual worst-case and best-case P&L from your real stakes (not an
+  idealized even split — two legs priced to sum to 100% can still net very differently
+  depending on how much you actually put on each side):
+  - 🔴 **Guaranteed loss** — even your best-case outcome is a loss.
+  - 🟢 **Arbitrage** — every outcome is a profit; the flag shows the guaranteed amount.
+  - 🟡 **Imbalanced hedge** — could go either way; shows the full loss-to-profit range.
+- **Doubled-up flag** (blue): two or more *open* trades on the same event **and** same side
+  (e.g. two separate "BOS ML" trades) — not inherently bad, but easy to do by accident, so
+  it's called out with your combined units/Rax on that side.
+- All of these fire three ways: passively on the Dashboard; actively as a confirmation
+  dialog for guaranteed-loss/double-down the moment you submit a trade that would create
+  one; and live under the New Trade form as you fill it in, so you can judge the projected
+  profit/loss of a hedge *before* logging it, not just after.
+- **Best-hedge suggestion**: once you have an open position on one side of an event and
+  start entering the *other* side's price, a "Best hedge: Xu — locks in a guaranteed profit
+  of Y Rax" suggestion appears with a **Use** button. It's sized to exactly equalize this
+  leg's payout with your smallest existing opposing payout — provably the unit size that
+  maximizes guaranteed profit (any less leaves money on the table; any more just adds risk
+  with no further upside, since the other leg becomes the binding constraint).
 
 ## League / Market / Event fields
 
